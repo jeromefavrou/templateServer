@@ -2,247 +2,399 @@
 #define TCPIP_HPP_INCLUDED
 
 
-/*    #include <sys/types.h>
+#ifdef __linux__
+    #include <sys/types.h>
     #include <sys/socket.h>
     #include <netinet/in.h>
     #include <arpa/inet.h>
     #include <unistd.h>
     #include <netdb.h>
 
-typedef int SOCKET;
-typedef struct sockaddr_in SOCKADDR_IN;
-typedef struct sockaddr SOCKADDR;
-typedef struct in_addr IN_ADDR;
-#define SOCKET_ERROR -1
-#define INVALID_SOCKET -1
-#define closesocket(s) close(s)*/
+    typedef int SOCKET;
+    typedef struct sockaddr_in SOCKADDR_IN;
+    typedef struct sockaddr SOCKADDR;
+    typedef struct in_addr IN_ADDR;
+    #define SOCKET_ERROR -1
+    #define INVALID_SOCKET -1
+    #define closesocket(s) close(s)
+#endif
 
-#include <winsock2.h>
-#include <Ws2tcpip.h>
+#ifdef WIN32
+    #include <winsock2.h>
+    #include <Ws2tcpip.h>
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <iostream>
-#include <map>
-#include <vector>
 #include <string>
 #include <memory>
 #include "tram.hpp"
 
+
+
 namespace SYSJF
 {
-    const char *inet_ntop(int af, const void *src, char *dst, socklen_t size)
-    {
-    struct sockaddr_storage ss;
-    unsigned long s = size;
+    #ifdef WIN32
+        const char *inet_ntop(int af, const void *src, char *dst, socklen_t size)
+        {
+            struct sockaddr_storage ss;
+            unsigned long s = size;
 
-    ZeroMemory(&ss, sizeof(ss));
-    ss.ss_family = af;
+            ZeroMemory(&ss, sizeof(ss));
+            ss.ss_family = af;
 
-    switch(af) {
-        case AF_INET:
-        ((struct sockaddr_in *)&ss)->sin_addr = *(struct in_addr *)src;
-        break;
-        case AF_INET6:
-        ((struct sockaddr_in6 *)&ss)->sin6_addr = *(struct in6_addr *)src;
-        break;
-        default:
-        return NULL;
-    }
-    /* cannot direclty use &size because of strict aliasing rules */
-    return (WSAAddressToString((struct sockaddr *)&ss, sizeof(ss), NULL, dst, &s) == 0)?
-            dst : NULL;
-    }
+            switch(af) {
+                case AF_INET:
+                ((struct sockaddr_in *)&ss)->sin_addr = *(struct in_addr *)src;
+                break;
+                case AF_INET6:
+                ((struct sockaddr_in6 *)&ss)->sin6_addr = *(struct in6_addr *)src;
+                break;
+                default:
+                return NULL;
+            }
+            /* cannot direclty use &size because of strict aliasing rules */
+            return (WSAAddressToString((struct sockaddr *)&ss, sizeof(ss), NULL, dst, &s) == 0)?
+                    dst : NULL;
+        }
+    #endif
 
 
-    class ClientConnection
+
+
+    class CSocketTCPType
     {
         public:
         ///heritage de la class d'erreur
+        class CSocketTCPTypeError : public Error
+        {
+            public:
+                CSocketTCPTypeError(int numero, std::string const& _str,level _level, int _debugLevel = 0)noexcept:Error(numero,_str,_level,_debugLevel){this->m_class="CSocketTCPType";};
+                virtual ~CSocketTCPTypeError(){};
+        };
 
-        private:
-            SOCKADDR_IN m_clientStruct;
-            std::shared_ptr<SOCKET> m_clientSocket;
+        public:
+            struct t_connect
+            {
+                std::string addr;
+                uint32_t port;
+            };
+
+            enum typeip{HOSTNAME,IP};
+
+        protected:
+            SOCKADDR_IN m_Struct;
+            std::shared_ptr<SOCKET> m_Socket;
 
             bool m_debug;
             bool m_debug2;
 
-        public:
-
-        ClientConnection(void)
-        {
-            this->m_debug = false;
-            this->m_debug2 = false;
-        }
-
-        ~ClientConnection(){};
+            #ifdef WIN32
+                //WSADATA WSAData;
+            #endif
 
         public:
 
-        SOCKADDR_IN & getSockAddrIn(void)
-        {
-            return this->m_clientStruct;
-        }
+            CSocketTCPType(void);
 
-        std::shared_ptr<SOCKET> & getSocket(void)
-        {
-            return this->m_clientSocket;
-        }
+            virtual ~CSocketTCPType(void);
 
-        std::string getIpAddr(void)
-        {
-            char buff[46] = { 0 };
-            return inet_ntop(this->m_clientStruct.sin_family, (void*)&(this->m_clientStruct.sin_addr), buff, 46);
-        }
+            SOCKADDR_IN & getSockAddrIn(void);
 
-        int getPort(void) const
-        {
-            return this->m_clientStruct.sin_port;
-        }
+            void NewSocket(void);
 
-        void Write(VCHAR const &buffer)
-        {
-            send(*this->m_clientSocket,(char*)buffer.data(),buffer.size(),0);
-        }
+            void CloseSocket(void);
 
-        template<unsigned int octets>int Read(VCHAR &buffer)
-        {
-            char buf[octets];
-            int lenght= recv(*this->m_clientSocket ,buf, octets,0);
-            buffer.clear();
+            std::shared_ptr<SOCKET> & getSocket(void);
 
-            for(int i=0;i<lenght;i++)
-                buffer.push_back(buf[i]);
+            std::string getIpAddr(void);
 
-            if(lenght == 0)
-                Error::add_to_log("connection to " + this->getIpAddr() + ":" + SYSJF::ss_cast<int , std::string>( this->getPort()) +" closed");
+            int getPort(void) const;
 
-            return lenght;
-        }
+            void forcedAllDebug(bool stat);
 
-        void forcedAllDebug(bool stat)
-        {
-            this->m_debug = stat;
-            this->m_debug2 = stat;
-        }
-
-        inline int getDebugLevel(void)
-        {
-            return this->m_debug2 ? 2 : this->m_debug ? 1 : 0;
-        }
+            int getDebugLevel(void);
     };
 
-    class CSocketTCPServeur
+
+
+
+    class CSocketTCPConnection : public CSocketTCPType
+    {
+        public:
+        ///heritage de la class d'erreur
+        class CSocketTCPConnectionError : public CSocketTCPTypeError
+        {
+            public:
+                CSocketTCPConnectionError(int numero, std::string const& _str,level _level, int _debugLevel = 0)noexcept:CSocketTCPTypeError(numero,_str,_level,_debugLevel){this->m_class="CSocketTCPConnection";};
+                virtual ~CSocketTCPConnectionError(){};
+        };
+
+        public:
+
+        struct t_connect
+        {
+            std::string addr;
+            uint32_t port;
+        };
+
+        enum typeip{HOSTNAME,IP};
+
+        public:
+        
+        CSocketTCPConnection(void);
+
+        void Connect(struct t_connect const & tc,typeip const & tip);
+
+        void Write(VCHAR const &buffer);
+
+        template<unsigned int octets>int Read(VCHAR &buffer);
+
+    };
+
+
+
+
+    class CSocketTCPServeur : public CSocketTCPType
     {
         public:
 
         ///heritage de la class d'erreur
-        class CSocketTCPServeurError : public Error
+        class CSocketTCPServeurError : public CSocketTCPTypeError
         {
             public:
-                CSocketTCPServeurError(int numero, std::string const& _str,level _level, int _debugLevel = 0)noexcept:Error(numero,_str,_level,_debugLevel){this->m_class="CSocketTCPServeur";};
+                CSocketTCPServeurError(int numero, std::string const& _str,level _level, int _debugLevel = 0)noexcept:CSocketTCPTypeError(numero,_str,_level,_debugLevel){this->m_class="CSocketTCPServeur";};
                 virtual ~CSocketTCPServeurError(){};
         };
 
-        CSocketTCPServeur(void)
-        {
-            WSAStartup(MAKEWORD(2,0), &this->WSAData);
-            this->m_debug = false;
-            this->m_debug2 = false;
-        }
+        CSocketTCPServeur(void);
 
-        ~CSocketTCPServeur(void)
-        {
-            WSACleanup();
-        }
+        void BindServeur(uint32_t const addr,uint32_t const port);
 
-        void NewSocket(unsigned int const &idx)
-        {
-            Sk_Channel[idx]=std::shared_ptr<SOCKET>(new SOCKET(socket(AF_INET,SOCK_STREAM,0)));
+        void Listen(unsigned int const nb);
 
-            if(*Sk_Channel[idx]==INVALID_SOCKET)
-                throw CSocketTCPServeur::CSocketTCPServeurError(1,"Socket Serveur erreur",Error::level::ERR );
-        }
+        CSocketTCPConnection AcceptClient(void);
 
-        void CloseSocket(unsigned int const & idx)
-        {
-            std::map<unsigned int,std::shared_ptr<SOCKET>>::iterator it;
-            it=Sk_Channel.find(idx);
-
-            if(it!=Sk_Channel.end())
-            {
-                closesocket(*Sk_Channel[idx]);
-                Sk_Channel.erase(it);
-            }
-        }
-
-        void BindServeur(unsigned int const  idx,uint32_t const addr,uint32_t const port)
-        {
-            std::map<unsigned int,std::shared_ptr<SOCKET>>::iterator it;
-            it=Sk_Channel.find(idx);
-
-            if(it==Sk_Channel.end())
-                throw CSocketTCPServeur::CSocketTCPServeurError(2,"Socket ("+ ss_cast<unsigned int,std::string>(idx)+") inutilisable",Error::level::ERR);
-
-            this->ServerAdress.sin_addr.s_addr=addr;
-            this->ServerAdress.sin_family=AF_INET;
-            this->ServerAdress.sin_port=htons(port);
-
-            if(bind(*Sk_Channel[idx],(struct sockaddr *)&ServerAdress,sizeof(ServerAdress))==SOCKET_ERROR)
-                throw CSocketTCPServeur::CSocketTCPServeurError(3,"le server n'a pas reussi a bind sur le port : "+ss_cast<uint32_t,std::string>(port),Error::level::ERR);
-        }
-        void Listen(unsigned int const idx,unsigned int const nb)
-        {
-            std::map<unsigned int,std::shared_ptr<SOCKET>>::iterator it;
-            it=Sk_Channel.find(idx);
-
-            if(it==Sk_Channel.end())
-                throw CSocketTCPServeur::CSocketTCPServeurError(4,"Socket ("+ ss_cast<unsigned int,std::string>(idx)+") inutilisable",Error::level::ERR);
-
-            listen(*Sk_Channel[idx],nb);
-        }
-
-        ClientConnection AcceptClient(unsigned int const idx)
-        {
-            std::map<unsigned int,std::shared_ptr<SOCKET>>::iterator it;
-            it=Sk_Channel.find(idx);
-
-            if(it==Sk_Channel.end())
-                throw CSocketTCPServeur::CSocketTCPServeurError(5,"Socket ("+ ss_cast<unsigned int,std::string>(idx)+") inutilisable",Error::level::ERR);
-
-            ClientConnection client;
-
-            int cu=sizeof(struct sockaddr_in);
-            client.getSocket()=std::shared_ptr<SOCKET>(new SOCKET(accept(*Sk_Channel[idx],(struct sockaddr *)&client.getSockAddrIn(),&cu)));
-
-            if(*client.getSocket()<0)
-                throw CSocketTCPServeur::CSocketTCPServeurError(6,"la connection n'a pas pue etre établie",Error::level::ERR);
-
-            Error::add_to_log("connecting to " + client.getIpAddr() + ":" + ss_cast<int , std::string>( client.getPort()),this->getDebugLevel());
-
-            return client;
-        }
-
-        void forcedAllDebug(bool stat)
-        {
-            this->m_debug = stat;
-            this->m_debug2 = stat;
-        }
-
-        inline int getDebugLevel(void)
-        {
-            return this->m_debug2 ? 2 : this->m_debug ? 1 : 0;
-        }
-
-    private:
-
-        std::map<unsigned int,std::shared_ptr<SOCKET>> Sk_Channel;
-        SOCKADDR_IN ServerAdress;
-
-        WSADATA WSAData;
-
-        bool m_debug;
-        bool m_debug2;
     };
+
+
+/*************************************************************************************************************************
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+***************************************************************************************************************************/
+
+
+    CSocketTCPType::CSocketTCPType(void):m_Socket(nullptr)
+    {
+        #ifdef WIN32
+            //WSA 2.2
+            //WSAStartup(MAKEWORD(2,2), &this->WSAData);
+            
+        #endif
+        
+        this->m_debug = false;
+        this->m_debug2 = false;
+    }
+
+    CSocketTCPType::~CSocketTCPType(void)
+    {
+        this->CloseSocket();   
+        #ifdef WIN32
+            //WSACleanup();
+        #endif
+    }
+
+    SOCKADDR_IN & CSocketTCPType::getSockAddrIn(void)
+    {
+        return this->m_Struct;
+    }
+
+    void CSocketTCPType::NewSocket(void)
+    {
+        this->m_Socket.reset(new SOCKET(socket(AF_INET,SOCK_STREAM,0)));
+
+        if(*this->m_Socket==INVALID_SOCKET)
+            throw CSocketTCPTypeError(1,"Socket Serveur error",Error::level::ERR );
+    }
+
+    void CSocketTCPType::CloseSocket(void)
+    {
+        if(this->m_Socket != nullptr)
+            closesocket(*this->m_Socket);
+
+        this->m_Socket = nullptr;
+    }
+
+    std::shared_ptr<SOCKET> & CSocketTCPType::getSocket(void)
+    {
+        return this->m_Socket;
+    }
+
+    std::string CSocketTCPType::getIpAddr(void)
+    {
+        char buff[46] = { 0 };
+        return inet_ntop(this->m_Struct.sin_family, (void*)&(this->m_Struct.sin_addr), buff, 46);
+    }
+
+    int CSocketTCPType::getPort(void) const
+    {
+        return this->m_Struct.sin_port;
+    }
+
+    void CSocketTCPType::forcedAllDebug(bool stat)
+    {
+        this->m_debug = stat;
+        this->m_debug2 = stat;
+    }
+
+    int CSocketTCPType::getDebugLevel(void)
+    {
+        return this->m_debug2 ? 2 : this->m_debug ? 1 : 0;
+    }
+
+/*************************************************************************************************************************
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+***************************************************************************************************************************/
+
+
+    CSocketTCPConnection::CSocketTCPConnection(void) : CSocketTCPType()
+    {
+    }
+
+    void CSocketTCPConnection::Connect(struct t_connect const & tc,typeip const & tip)
+    {
+        if(this->m_Socket == nullptr)
+            throw CSocketTCPConnection::CSocketTCPConnectionError(3,"Connect impossible car pas de socket",Error::level::ERR);
+
+        if(tip==this->IP)
+            this->m_Struct.sin_addr.s_addr=inet_addr(tc.addr.c_str());
+        else if(tip==this->HOSTNAME)
+        {
+            struct hostent * hostinfo = nullptr;
+            hostinfo = gethostbyname((const char*)tc.addr.c_str());
+
+            if (hostinfo == nullptr)
+                throw CSocketTCPConnectionError(1,"server name not found : " + tc.addr,Error::level::ERR);
+
+            this->m_Struct.sin_addr=*(IN_ADDR *) hostinfo->h_addr;
+        }
+
+        this->m_Struct.sin_family=AF_INET;
+        this->m_Struct.sin_port=htons(tc.port);
+
+        if (connect(*this->m_Socket , (struct sockaddr *)&this->m_Struct , sizeof(this->m_Struct)) == SOCKET_ERROR)
+            throw CSocketTCPConnectionError(2,"echec of connection to server",Error::level::ERR);
+    }
+
+    void CSocketTCPConnection::Write(VCHAR const &buffer)
+    {
+        if(this->m_Socket == nullptr)
+            throw CSocketTCPConnection::CSocketTCPConnectionError(3,"Write impossible car pas de socket",Error::level::ERR);
+
+        send(*this->m_Socket,(char*)buffer.data(),buffer.size(),0);
+    }
+
+    template<unsigned int octets>int CSocketTCPConnection::Read(VCHAR &buffer)
+    {
+        if(this->m_Socket == nullptr)
+            throw CSocketTCPConnection::CSocketTCPConnectionError(3,"Read impossible car pas de socket",Error::level::ERR);
+
+        char buf[octets];
+        int lenght= recv(*this->m_Socket ,buf, octets,0);
+        buffer.clear();
+
+        for(int i=0;i<lenght;i++)
+            buffer.push_back(buf[i]);
+
+        if(lenght == 0)
+            CSocketTCPConnectionError::add_to_log("connection to " + this->getIpAddr() + ":" + SYSJF::ss_cast<int , std::string>( this->getPort()) +" closed");
+
+        return lenght;
+    }
+
+/*************************************************************************************************************************
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+ * 
+***************************************************************************************************************************/
+
+    CSocketTCPServeur::CSocketTCPServeur(void):CSocketTCPType()
+    {
+    }
+
+    void CSocketTCPServeur::BindServeur(uint32_t const addr,uint32_t const port)
+    {
+        if(this->m_Socket == nullptr)
+            throw CSocketTCPServeur::CSocketTCPServeurError(3,"le server n'a pas reussi a bind sur le port : "+ss_cast<uint32_t,std::string>(port) + " car pas de socket",Error::level::ERR);
+
+            
+        this->m_Struct.sin_addr.s_addr=addr;
+        this->m_Struct.sin_family=AF_INET;
+        this->m_Struct.sin_port=htons(port);
+
+        if(bind(*this->m_Socket,(struct sockaddr *)&this->m_Struct,sizeof(this->m_Struct))==SOCKET_ERROR)
+            throw CSocketTCPServeur::CSocketTCPServeurError(3,"le server n'a pas reussi a bind sur le port : "+ss_cast<uint32_t,std::string>(port),Error::level::ERR);
+    }
+
+    void CSocketTCPServeur::Listen(unsigned int const nb)
+    {
+        if(this->m_Socket == nullptr)
+            throw CSocketTCPServeur::CSocketTCPServeurError(3,"listen impossible car pas de socket",Error::level::ERR);
+
+        listen(*this->m_Socket,nb);
+    }
+
+    CSocketTCPConnection CSocketTCPServeur::AcceptClient(void)
+    {
+        if(this->m_Socket == nullptr)
+            throw CSocketTCPServeur::CSocketTCPServeurError(3,"aceptClient impossible car pas de socket",Error::level::ERR);
+
+        CSocketTCPConnection client;
+
+        int cu=sizeof(struct sockaddr_in);
+
+        #ifdef WIN32
+            client.getSocket()=std::shared_ptr<SOCKET>(new SOCKET(accept(*this->m_Socket,(struct sockaddr *)&client.getSockAddrIn(),&cu)));
+        #endif
+
+        #ifdef __linux__
+            client.getSocket()=std::shared_ptr<SOCKET>(new SOCKET(accept(*this->m_Socket,(struct sockaddr *)&client.getSockAddrIn(),(socklen_t *)&cu)));
+        #endif
+
+        if(*client.getSocket()<0)
+            throw CSocketTCPServeur::CSocketTCPServeurError(6,"la connection n'a pas pue etre établie",Error::level::ERR);
+
+        Error::add_to_log("connecting to " + client.getIpAddr() + ":" + ss_cast<int , std::string>( client.getPort()),this->getDebugLevel());
+
+        return client;
+    }
 };
+
 #endif

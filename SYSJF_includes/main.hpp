@@ -2,7 +2,12 @@
 #define MAIN
 
 #include "arguments.hpp"
+#include "tram.hpp"
 
+#include <unistd.h>
+
+#include <fstream>
+#include <iostream>
 #include <memory>
 
 namespace SYSJF
@@ -21,7 +26,7 @@ namespace SYSJF
             class MainError :public Error
             {
                 public:
-                MainError(int numero, std::string const& _str,level _level , int _debugLevel)noexcept:Error(numero,_str,_level ,_debugLevel){this->m_class="MainError";}
+                MainError(int numero, std::string const& _str,level _level , int _debugLevel = 0)noexcept:Error(numero,_str,_level ,_debugLevel){this->m_class="MainError";}
                 virtual ~MainError()noexcept(true){}
             };
 
@@ -33,6 +38,10 @@ namespace SYSJF
             int getDebugLevel(void);
 
             void forcedAllDebug(bool stat);
+
+            void terminalBanner(std::string const & bannerFile);
+
+            ARGV getArgv(void) const;
 
             std::string version;
 
@@ -52,6 +61,11 @@ namespace SYSJF
         this->m_arguments = std::make_unique<ARGV>(ARGV(0,{}));
     }
 
+    ARGV Main::getArgv(void) const
+    {
+        return *this->m_arguments;
+    }
+
     inline int Main::getDebugLevel(void)
     {
         return this->m_debug2 ? 2 : this->m_debug ? 1 : 0;
@@ -61,6 +75,33 @@ namespace SYSJF
     {
         this->m_debug = stat;
         this->m_debug2 = stat;
+    }
+
+    void Main::terminalBanner(std::string const & bannerFile)
+    {
+        std::fstream If(bannerFile,std::ios::in | std::ios::binary);
+
+        try 
+        {
+            if(!If || If.fail() || If.bad())
+                throw MainError(1,"download of \""+bannerFile+"\" impossible",SYSJF::Error::level::WARN);
+
+            If.seekg (0, If.end);
+            long int length = If.tellg();
+            If.seekg (0, If.beg);
+
+            VCHAR ban=VCHAR(length,0);
+
+            If.read((char*)ban.data(),length);
+
+            std::cout << std::string(ban.begin() , ban.end()) << std::endl;
+        }
+        catch(Error & e)
+        {
+            std::cerr << e.what() << std::endl;
+        }
+
+        std::cout << "version: " <<this->version << std::endl <<std::endl;
     }
 
     int Main::run(void)

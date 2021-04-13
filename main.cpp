@@ -3,7 +3,7 @@
 #include <thread>
 #include <vector>
 
-void RuntimeClient(SYSJF::ClientConnection  client )
+void RuntimeClient(SYSJF::CSocketTCPConnection  client )
 {
     while(true)
     {
@@ -15,7 +15,7 @@ void RuntimeClient(SYSJF::ClientConnection  client )
                 break;
 
             std::cout <<"\treceived: "<<resp.size() << "bytes by " << client.getIpAddr() << ":" << client.getPort()<<std::endl;
-            std::cout << '\tdata: ' << std::string(resp.begin(),resp.end()) << std::endl ;
+            std::cout << "\tdata: " << std::string(resp.begin(),resp.end()) << std::endl ;
         }
         catch(SYSJF::Error & e)
 		{
@@ -40,9 +40,9 @@ int SYSJF::Main::body(void)
 
 	try
 	{
-		server.NewSocket(0);
-    	server.BindServeur(0 , INADDR_ANY , 1100);
-		server.Listen(0 ,nMaxClient );
+		server.NewSocket();
+    	server.BindServeur( INADDR_ANY , 1100);
+		server.Listen(nMaxClient );
 	}
 	catch(SYSJF::Error & e)
 	{
@@ -63,7 +63,7 @@ int SYSJF::Main::body(void)
     {
 		try
 		{
-			SYSJF::ClientConnection client = server.AcceptClient(0);
+			SYSJF::CSocketTCPConnection client = server.AcceptClient();
 
 			clientThread.emplace_back(&RuntimeClient , client  );
 

@@ -4,14 +4,33 @@
 #include <vector>
 #include <string>
 #include <sstream>
-#include "Error.hpp"
+#include "error.hpp"
 
 
 namespace SYSJF
 {
 typedef unsigned char byte;
 
-typedef std::vector<byte> VCHAR;
+//typedef std::vector<byte> VCHAR;
+
+    class VCHAR : public std::vector<byte>
+    {
+        public:
+        
+        VCHAR():std::vector<byte>()
+        {}
+
+        template< class InputIt >constexpr VCHAR( InputIt first, InputIt last ) : std::vector<byte>(first , last){}
+
+        explicit VCHAR( size_type count,const byte& value = byte()) : std::vector<byte>(count , value){}
+
+        std::string c_str(void) const
+        {
+            return std::string(this->begin() , this->end());
+        }
+
+    };
+
     class Tram
     {
         public:

@@ -35,6 +35,7 @@ namespace SYSJF
 
         std::string  m_progFile;
         std::string  m_progName;
+        std::string  m_progDir;
 
         // [main[opt1,opt2,...],main2[opt1,opt3,...],...]
         argv_t m_MainArg;
@@ -48,6 +49,7 @@ namespace SYSJF
 
         std::string getProgName(void) const ;
         std::string getProgFile(void) const ;
+        std::string getProgDir(void) const ;
 
         values_t getValueOptArg(std::string const & argKey) const ;
         argv_t getOptArg(void) const ;
@@ -81,17 +83,17 @@ namespace SYSJF
             if(this->m_progFile[i] == seperatorPath)
             {
                 this->m_progName = std::string(this->m_progFile.begin() + i +1,this->m_progFile.end());
+                this->m_progDir = std::string( this->m_progFile.begin() , this->m_progFile.end() - (this->m_progFile.size() - i) );
                 break;
             }
         }
+
 
         //extracte Main
 
         for(auto i = 1 ; i < argc ; i++)
         {
             std::string cur(argv[i]);
-            
-            
 
             if(cur.size() > 1 )
             {
@@ -142,6 +144,10 @@ namespace SYSJF
     std::string ARGV::getProgFile(void) const
     {
         return this->m_progFile;
+    }
+    std::string ARGV::getProgDir(void) const
+    {
+        return this->m_progDir;
     }
 
     ARGV::values_t ARGV::getValueOptArg(std::string const & argKey) const 
